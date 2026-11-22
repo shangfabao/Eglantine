@@ -1,7 +1,8 @@
 name: build-linux
 
-# Reusable: builds the Linux binaries (x86_64 and aarch64; with pgo=both also the clang PGO
-# variants) and uploads one artifact per platform holding the tar.gz and the AppImage.
+# Reusable: builds the Linux binaries (x86_64 and aarch64, or the arch input's subset;
+# with pgo=both also the clang PGO variants) and uploads one artifact per platform
+# holding the tar.gz and the AppImage.
 on:
   workflow_call:
     inputs:
@@ -31,6 +32,10 @@ on:
       nightly:
         type: boolean
         default: true
+      arch:
+        description: Architectures to build (both, x86_64 or aarch64)
+        type: string
+        default: both
       pgo:
         description: none or both
         type: string
@@ -60,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, aarch64]
+        arch: ${{ fromJSON(inputs.arch == 'aarch64' && '["aarch64"]' || (inputs.arch == 'x86_64' && '["x86_64"]' || '["x86_64","aarch64"]')) }}
         pgo: ${{ fromJSON(inputs.pgo == 'only' && '[true]' || (inputs.pgo == 'both' && '[false, true]' || '[false]')) }}
 
     steps:

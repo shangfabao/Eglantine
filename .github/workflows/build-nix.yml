@@ -31,13 +31,17 @@ on:
         type: string
         default: none
       linux:
-        description: Build x86_64-linux and aarch64-linux
+        description: Build the Linux systems (the arch input picks which)
         type: boolean
         default: true
       macos:
         description: Build aarch64-darwin
         type: boolean
         default: true
+      arch:
+        description: Which Linux systems to build (both, x86_64 or aarch64)
+        type: string
+        default: both
       # The four values .github/actions/setup-build writes as GIT-* files. Nix
       # only sees tracked files in a git checkout, so the build job writes and
       # stages them itself; without them GetSCMRev has no .git to ask and the
@@ -95,8 +99,13 @@ jobs:
       fail-fast: false
       matrix:
         system: ${{ fromJSON(
-          inputs.linux && inputs.macos && '["x86_64-linux","aarch64-linux","aarch64-darwin"]'
-          || inputs.macos && '["aarch64-darwin"]'
+          inputs.macos && (
+            inputs.linux && inputs.arch == 'aarch64' && '["aarch64-linux","aarch64-darwin"]'
+            || inputs.linux && inputs.arch == 'x86_64' && '["x86_64-linux","aarch64-darwin"]'
+            || (inputs.linux && '["x86_64-linux","aarch64-linux","aarch64-darwin"]' || '["aarch64-darwin"]')
+          )
+          || inputs.linux && inputs.arch == 'aarch64' && '["aarch64-linux"]'
+          || inputs.linux && inputs.arch == 'x86_64' && '["x86_64-linux"]'
           || inputs.linux && '["x86_64-linux","aarch64-linux"]'
           || '[]') }}
         pgo: ${{ fromJSON(inputs.pgo == 'both' && '[false, true]' || inputs.pgo == 'only' && '[true]' || '[false]') }}

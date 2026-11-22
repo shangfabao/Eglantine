@@ -28,6 +28,11 @@ on:
         description: Build Linux binaries
         type: boolean
         default: true
+      linux_arch:
+        description: Linux architectures (base binaries and Nix systems)
+        type: choice
+        options: [both, x86_64, aarch64]
+        default: both
       build_windows:
         description: Build Windows binaries
         type: boolean
@@ -36,6 +41,11 @@ on:
         description: Build macOS binaries
         type: boolean
         default: true
+      build_nix:
+        description: Build the Nix packages too (yes), not at all (no), or only them (only)
+        type: choice
+        options: [yes, no, only]
+        default: yes
       pgo:
         description: Also build the PGO variants
         type: choice
@@ -142,7 +152,8 @@ jobs:
     needs: prepare
     if: >-
       needs.prepare.outputs.skip != 'true' &&
-      (github.event_name != 'workflow_dispatch' || inputs.build_linux)
+      (github.event_name != 'workflow_dispatch' ||
+       (inputs.build_nix != 'only' && inputs.build_linux))
     uses: ./.github/workflows/build-linux.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
@@ -154,6 +165,7 @@ jobs:
       release: ${{ needs.prepare.outputs.kind == 'stable' || needs.prepare.outputs.kind == 'rc' }}
       nightly: ${{ needs.prepare.outputs.nightly == 'true' }}
       pgo: ${{ inputs.pgo || (needs.prepare.outputs.kind == 'branch' && 'none' || 'both') }}
+      arch: ${{ inputs.linux_arch || 'both' }}
       save_cache: ${{ inputs.save_cache || (needs.prepare.outputs.kind == 'daily') }}
 
   windows:
@@ -161,7 +173,8 @@ jobs:
     needs: prepare
     if: >-
       needs.prepare.outputs.skip != 'true' &&
-      (github.event_name != 'workflow_dispatch' || inputs.build_windows)
+      (github.event_name != 'workflow_dispatch' ||
+       (inputs.build_nix != 'only' && inputs.build_windows))
     uses: ./.github/workflows/build-windows.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
@@ -180,7 +193,8 @@ jobs:
     needs: prepare
     if: >-
       needs.prepare.outputs.skip != 'true' &&
-      (github.event_name != 'workflow_dispatch' || inputs.build_macos)
+      (github.event_name != 'workflow_dispatch' ||
+       (inputs.build_nix != 'only' && inputs.build_macos))
     uses: ./.github/workflows/build-macos.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
@@ -199,16 +213,14 @@ jobs:
   nix:
     name: Nix
     needs: prepare
-    # A push or a scheduled run builds every system. A manual run follows the
-    # same Linux/macOS ticks that drive the other OS jobs, and is skipped
-    # entirely when the operator asked for Windows only.
-    # (There is no `platforms` input: per-OS booleans replaced it in
-    # baa6d295ac, two days before the Nix workflows merged -- this job kept
-    # reading the deleted one, so it always ran with `os: all`.)
+    # A push or a scheduled run builds every system. A manual run needs
+    # build_nix=yes or only (`no` skips this job), and its systems follow the
+    # same Linux/macOS ticks (and the Linux arch choice) that drive the other
+    # OS jobs; with `only` those other OS jobs are skipped instead.
     if: >-
       needs.prepare.outputs.skip != 'true' &&
       (github.event_name != 'workflow_dispatch' ||
-       inputs.build_linux || inputs.build_macos)
+       (inputs.build_nix != 'no' && (inputs.build_linux || inputs.build_macos)))
     uses: ./.github/workflows/build-nix.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
@@ -218,6 +230,7 @@ jobs:
       display_pgo_store: ${{ needs.prepare.outputs.display_pgo_store }}
       linux: ${{ github.event_name != 'workflow_dispatch' || inputs.build_linux }}
       macos: ${{ github.event_name != 'workflow_dispatch' || inputs.build_macos }}
+      arch: ${{ inputs.linux_arch || 'both' }}
       # Same identity inputs the linux job gets, so the Nix binary reports the
       # same version string as the release it sits next to.
       refspec: ${{ needs.prepare.outputs.refspec }}
@@ -234,7 +247,7 @@ jobs:
     needs: [linux, macos, nix]
     # Only speak up when Nix is the sole failure: every OS job that actually
     # ran must have passed, and at least one of them must have run (a
-    # Windows-only dispatch skips both and never reaches here anyway).
+    # Windows-only or Nix-only dispatch skips both and never reaches here).
     if: >-
       always() && needs.nix.result == 'failure' &&
       needs.linux.result != 'failure' &&
@@ -270,6 +283,7 @@ jobs:
       needs.prepare.result == 'success' &&
       needs.prepare.outputs.skip != 'true' &&
       needs.prepare.outputs.publish == 'true' &&
+      (github.event_name != 'workflow_dispatch' || inputs.build_nix != 'only') &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     permissions:
