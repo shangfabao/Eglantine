@@ -183,7 +183,7 @@ Files: CMakeModules/CPMUtil.cmake
        tools/cpm/*
        tools/update-cpm.sh
        tools/shellcheck.sh
-       docs/CPMUtil.md
+       docs/CPMUtil.mdx
        **cpmfile.json
 Copyright: 2025 crueter <crueter@crueter.xyz>
 License: GPL-3.0-or-later
