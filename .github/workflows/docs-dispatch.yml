@@ -1,0 +1,42 @@
+# The documentation site is built and deployed by Eglantine-Community/docs,
+# which checks the content out of docs/ in this repository at build time.
+# This workflow only tells it that docs/ changed, so none of the Node, pnpm or
+# deploy tooling (and none of its secrets) lives in this repository's CI.
+on:
+  push:
+    branches:
+      - nx2
+      - nx2-experimental
+    paths:
+      - docs/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-dispatch
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the docs repository to rebuild
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+          SOURCE_REPO: ${{ github.repository }}
+          SOURCE_REF: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          # Forks and pull requests do not get the secret; nothing to do there.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "DOCS_DISPATCH_TOKEN is not set, skipping the docs rebuild."
+            exit 0
+          fi
+
+          gh api repos/Eglantine-Community/docs/dispatches \
+            -f event_type=docs-updated \
+            -f "client_payload[repository]=$SOURCE_REPO" \
+            -f "client_payload[ref]=$SOURCE_REF" \
+            -f "client_payload[branch]=$SOURCE_BRANCH"
